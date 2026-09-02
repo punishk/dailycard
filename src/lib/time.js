@@ -14,15 +14,21 @@ export function timeAgo(iso, now = Date.now()) {
   return new Date(t).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
 }
 
-/** "9월 1일 화요일" */
+/** "9월 1일 (화)" — 좁은 폰 화면에서도 잘리지 않도록 짧게 */
 export function todayLabel(d = new Date()) {
-  return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
+  const short = d.toLocaleDateString('ko-KR', { weekday: 'short' }) // "화요일" 또는 "화"
+  const day = short.replace('요일', '')
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${day})`
 }
 
-/** "오후 3:04 기준" */
+/** "15:04" — 뒤에 "기준"을 붙여 쓴다 */
 export function updatedLabel(iso) {
   if (!iso) return ''
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return ''
-  return new Date(t).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })
+  return new Date(t).toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
 }

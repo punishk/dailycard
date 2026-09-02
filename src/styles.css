@@ -75,6 +75,9 @@ code {
 .app {
   height: 100%;
   display: grid;
+  /* minmax(0, 1fr) 이 없으면 상단 바처럼 줄어들지 않는 내용이
+     열을 화면보다 넓게 밀어내서 오른쪽이 잘린다 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr;
   position: relative;
   overflow: hidden;
@@ -95,6 +98,7 @@ code {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   min-height: 34px;
 }
 
@@ -103,6 +107,8 @@ code {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .topbar__date {
@@ -110,14 +116,25 @@ code {
   font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* 자리가 모자라면 "기준" 시각부터 줄어든다 */
 .topbar__updated {
   font-size: 11.5px;
   color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.topbar__right {
+  flex: 0 0 auto;
 }
 
 .topbar__offline {
@@ -314,22 +331,24 @@ html[data-theme='light'] .rail__chip.is-active {
   will-change: transform;
 }
 
+/* 손을 뗐을 때: 살짝 지나쳤다 제자리로 돌아오는 스프링 곡선 */
 .deck:not(.is-dragging) .deck__y {
-  transition: transform 0.36s cubic-bezier(0.2, 0.82, 0.28, 1);
+  transition: transform 0.46s cubic-bezier(0.16, 0.86, 0.24, 1.06);
 }
 
 .deck:not(.is-dragging) .deck__x {
-  transition: transform 0.3s cubic-bezier(0.2, 0.82, 0.28, 1);
+  transition: transform 0.4s cubic-bezier(0.16, 0.86, 0.24, 1.04);
 }
 
+/* 카테고리를 바꾸면 넘긴 방향에서 밀려 들어온다 */
 .deck.is-entering .deck__x {
-  animation: deckEnter 0.3s cubic-bezier(0.22, 0.8, 0.3, 1);
+  animation: deckEnter 0.46s cubic-bezier(0.16, 0.86, 0.24, 1.04);
 }
 
 @keyframes deckEnter {
   from {
-    opacity: 0.2;
-    transform: translate3d(0, 0, 0) scale(0.975);
+    opacity: 0.25;
+    transform: translate3d(var(--enter-from, 0), 0, 0) scale(0.94);
   }
   to {
     opacity: 1;
@@ -339,144 +358,118 @@ html[data-theme='light'] .rail__chip.is-active {
 
 .deck__slot {
   position: absolute;
-  inset: 0;
-  padding: 4px 16px max(56px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 0 16px;
   display: flex;
-  align-items: center; /* 짧은 카드는 늘리지 않고 가운데에 둔다 */
   justify-content: center;
   will-change: transform;
 }
 
-/* 위아래 가장자리 그라데이션 — 다음 카드가 살짝 비치게 */
+/* 위아래 가장자리 — 걸쳐 보이는 다음 카드가 자연스럽게 사라지도록 */
 .deck__edge {
   position: absolute;
   left: 0;
   right: 0;
-  height: 26px;
+  height: 44px;
   pointer-events: none;
   z-index: 3;
 }
 
 .deck__edge--top {
   top: 0;
-  background: linear-gradient(to bottom, var(--bg), transparent);
+  background: linear-gradient(to bottom, var(--bg) 12%, transparent);
 }
 
 .deck__edge--bottom {
   bottom: 0;
-  background: linear-gradient(to top, var(--bg), transparent);
-}
-
-.deck__next {
-  position: absolute;
-  left: 50%;
-  bottom: max(10px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  z-index: 4;
-  appearance: none;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(8px);
-  color: var(--text-dim);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  animation: nudge 2.4s ease-in-out infinite;
-  transition: color 0.16s ease, border-color 0.16s ease;
-}
-
-.deck__next:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-@keyframes nudge {
-  0%, 68%, 100% { transform: translateX(-50%) translateY(0); }
-  80% { transform: translateX(-50%) translateY(4px); }
+  height: 52px;
+  background: linear-gradient(to top, var(--bg) 12%, transparent);
 }
 
 /* ── 카드 ────────────────────────────────────────────────── */
 
 .card {
+  --card-bg: var(--surface);
   position: relative;
   width: 100%;
   max-width: 560px;
-  /* 내용만큼만 차지하되, 너무 납작하거나 화면을 넘지 않게.
-     폰처럼 세로가 긴 화면에서는 화면을 넉넉히 채운다. */
-  max-height: 100%;
-  min-height: min(clamp(300px, 58vh, 560px), 100%);
+  height: 100%; /* 높이는 CardDeck 이 화면에 맞춰 계산한다 */
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--card-bg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity 0.34s ease, transform 0.34s cubic-bezier(0.16, 0.86, 0.24, 1.04);
 }
 
+/* 위아래로 걸쳐 보이는 이웃 카드 — 흐리게 물러나 있는다 */
 .card.is-idle {
-  opacity: calc(1 - var(--depth) * 0.34);
-  transform: scale(calc(1 - var(--depth) * 0.02));
+  opacity: calc(1 - var(--depth) * 0.55);
+  transform: scale(calc(1 - var(--depth) * 0.035));
 }
 
 .card--knowledge {
-  background: linear-gradient(
-      168deg,
-      color-mix(in srgb, var(--accent) 13%, var(--surface)),
-      var(--surface) 46%
-    );
+  --card-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 
 .card__media {
   position: relative;
   flex: 0 0 auto;
-  height: clamp(150px, 30vh, 280px);
+  height: clamp(120px, 36%, 300px);
   background: var(--surface-2);
   overflow: hidden;
 }
 
-.card__media img {
+/* 뒤에 깔리는 흐린 배경 — 남는 여백을 메운다 */
+.card__mediaBlur {
+  position: absolute;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
+  object-fit: cover;
+  filter: blur(20px) saturate(1.35);
+  opacity: 0.55;
+  transform: translateZ(0);
+}
+
+/* 실제 사진 — 잘라내지 않고 전체를 보여준다 */
+.card__mediaImg {
+  position: relative;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
-.card__mediaFade {
-  position: absolute;
-  inset: auto 0 -1px 0;
-  height: 56px;
-  background: linear-gradient(to top, var(--surface), transparent);
-}
-
-.card--knowledge .card__mediaFade {
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--accent) 13%, var(--surface)),
-    transparent
-  );
-}
-
 .card__body {
-  /* 카드 안을 채워서 '원문 보기' 줄이 항상 카드 바닥에 붙게 한다 */
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 22px 22px 18px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  gap: 11px;
+  padding: 20px 22px 0;
+  overflow: hidden;
 }
 
-/* 내용이 카드보다 길 때만 카드 안에서 손가락 스크롤을 허용한다 */
-.card__body.is-scrollable {
-  touch-action: pan-y;
+/* 본문 — 넘치면 잘라내고 아래를 흐리게 처리한다.
+   카드 안에서 스크롤하지 않기 때문에 글자 위에서도 스와이프가 그대로 먹는다. */
+.card__text {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.card__textFade {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 34px;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--card-bg), transparent);
 }
 
 .card__meta {
@@ -534,8 +527,9 @@ html[data-theme='light'] .rail__chip.is-active {
 }
 
 .card__actions {
-  margin-top: auto;
-  padding-top: 14px;
+  flex: 0 0 auto;
+  margin: 0 22px;
+  padding: 12px 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -839,10 +833,13 @@ html[data-theme='light'] .rail__chip.is-active {
     padding-right: 28px;
   }
   .deck__slot {
-    padding: 8px 28px 28px;
+    padding: 0 28px;
   }
   .card__body {
-    padding: 26px 28px 20px;
+    padding: 24px 28px 0;
+  }
+  .card__actions {
+    margin: 0 28px;
   }
 }
 

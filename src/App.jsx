@@ -24,6 +24,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [online, setOnline] = useState(() => navigator.onLine !== false)
   const [installPrompt, setInstallPrompt] = useState(null)
+  const [catDir, setCatDir] = useState(0)
 
   /* ── 데이터 불러오기 ─────────────────────────────────────── */
 
@@ -178,10 +179,23 @@ export default function App() {
       setCatIndex((prev) => {
         const n = categories.length
         if (n === 0) return prev
+        setCatDir(dir)
         return (prev + dir + n) % n
       })
     },
     [categories.length]
+  )
+
+  // 칩을 직접 눌렀을 때도 어느 쪽에서 밀려 들어올지 정해 준다
+  const selectCategory = useCallback(
+    (next) => {
+      setCatIndex((prev) => {
+        if (next === prev) return prev
+        setCatDir(next > prev ? 1 : -1)
+        return next
+      })
+    },
+    []
   )
 
   const toggleBookmark = useCallback((id) => {
@@ -300,7 +314,7 @@ export default function App() {
       <CategoryRail
         categories={categories}
         activeIndex={safeCatIndex}
-        onSelect={setCatIndex}
+        onSelect={selectCategory}
       />
 
       <CardDeck
@@ -309,6 +323,7 @@ export default function App() {
         index={cardIndex}
         accent={category?.accent}
         categoryLabel={category?.label}
+        enterFrom={catDir}
         bookmarkSet={bookmarkSet}
         seen={seen}
         onIndexChange={setCardIndex}

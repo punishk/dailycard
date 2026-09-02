@@ -1,23 +1,42 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import NewsCard from './NewsCard.jsx'
 
+/** 카드 사이 간격(px) */
+const GAP = 14
 /** 다음 카드로 넘기기로 판정하는 세로 이동 거리(카드 높이 대비) */
-const V_COMMIT_RATIO = 0.16
+const V_COMMIT_RATIO = 0.17
 /** 빠르게 튕겼을 때 거리와 무관하게 넘기는 속도 임계값(px/ms) */
-const V_FLICK = 0.45
+const V_FLICK = 0.4
 /** 카테고리 전환으로 판정하는 가로 이동 거리(px) */
-const H_COMMIT_PX = 78
-const H_FLICK = 0.42
+const H_COMMIT_PX = 72
+const H_FLICK = 0.38
 /** 축을 세로/가로 중 하나로 고정하기 시작하는 이동 거리(px) */
-const AXIS_LOCK_PX = 10
+const AXIS_LOCK_PX = 8
 /** 앞뒤로 몇 장을 미리 그려둘지 */
 const WINDOW = 2
+
+/** 화면 높이에 맞춘 카드 높이. 위아래로 다음 카드가 살짝 걸쳐 보이게 남겨 둔다. */
+function cardHeightFor(deckHeight) {
+  if (!deckHeight) return 0
+  const ideal = Math.round(deckHeight * 0.72)
+  return Math.max(240, Math.min(deckHeight - 72, Math.min(ideal, 620)))
+}
+
+/** 짧은 진동 — 지원하지 않는 기기에서는 조용히 무시된다 */
+function tick(ms = 8) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(ms)
+  } catch {
+    /* 무시 */
+  }
+}
 
 export default function CardDeck({
   cards,
   index,
   accent,
   categoryLabel,
+  enterFrom = 0,
   bookmarkSet,
   seen,
   onIndexChange,
@@ -28,10 +47,14 @@ export default function CardDeck({
   const deckRef = useRef(null)
   const [height, setHeight] = useState(0)
   const [drag, setDrag] = useState({ dx: 0, dy: 0, active: false })
-  const [enter, setEnter] = useState('')
+  const [entering, setEntering] = useState(true)
 
   const pointer = useRef(null)
   const last = Math.max(0, cards.length - 1)
+
+  const cardH = useMemo(() => cardHeightFor(height), [height])
+  const step = cardH + GAP
+  const topGap = Math.max(0, Math.round((height - cardH) / 2))
 
   /* 덱의 실제 높이를 재서 픽셀 단위로 정확히 움직인다 */
   useLayoutEffect(() => {
@@ -44,10 +67,10 @@ export default function CardDeck({
     return () => ro.disconnect()
   }, [])
 
-  /* 카테고리가 바뀌어 새로 마운트되면 살짝 슬라이드해 들어온다 */
+  /* 카테고리가 바뀌어 새로 마운트되면 방향에 맞춰 밀려 들어온다 */
   useEffect(() => {
-    setEnter('is-entering')
-    const t = setTimeout(() => setEnter(''), 300)
+    setEntering(true)
+    const t = setTimeout(() => setEntering(false), 460)
     return () => clearTimeout(t)
   }, [])
 
@@ -62,9 +85,20 @@ export default function CardDeck({
   const go = useCallback(
     (delta) => {
       const next = Math.min(last, Math.max(0, index + delta))
-      if (next !== index) onIndexChange(next)
+      if (next !== index) {
+        tick(9)
+        onIndexChange(next)
+      }
     },
     [index, last, onIndexChange]
+  )
+
+  const switchCategory = useCallback(
+    (dir) => {
+      tick(12)
+      onCategoryChange(dir)
+    },
+    [onCategoryChange]
   )
 
   /* ── 포인터(터치·마우스·펜) 제스처 ─────────────────────── */
@@ -79,7 +113,6 @@ export default function CardDeck({
       y0: e.clientY,
       t0: performance.now(),
       axis: null,
-      moved: false,
     }
     setDrag({ dx: 0, dy: 0, active: true })
   }, [])
@@ -97,7 +130,6 @@ export default function CardDeck({
         const ady = Math.abs(dy)
         if (Math.max(adx, ady) < AXIS_LOCK_PX) return
         p.axis = ady >= adx ? 'y' : 'x'
-        p.moved = true
         // 축이 정해진 뒤부터 포인터를 붙잡아 화면 밖으로 나가도 추적한다
         try {
           e.currentTarget.setPointerCapture(e.pointerId)
@@ -109,10 +141,11 @@ export default function CardDeck({
       if (p.axis === 'y') {
         let v = dy
         // 첫 장 위로, 마지막 장 아래로는 고무줄처럼 저항을 준다
-        if ((index === 0 && v > 0) || (index === last && v < 0)) v *= 0.32
+        if ((index === 0 && v > 0) || (index === last && v < 0)) v *= 0.3
         setDrag({ dx: 0, dy: v, active: true })
       } else {
-        setDrag({ dx: dx * 0.85, dy: 0, active: true })
+        // 가로는 살짝 무겁게 따라오게 해서 실수로 넘어가지 않게 한다
+        setDrag({ dx: dx * 0.7, dy: 0, active: true })
       }
     },
     [index, last]
@@ -132,18 +165,14 @@ export default function CardDeck({
 
       if (p.axis === 'y') {
         const speed = Math.abs(dy) / dt
-        const threshold = Math.max(48, (height || 600) * V_COMMIT_RATIO)
-        if (Math.abs(dy) > threshold || speed > V_FLICK) {
-          go(dy < 0 ? 1 : -1)
-        }
+        const threshold = Math.max(42, (cardH || 400) * V_COMMIT_RATIO)
+        if (Math.abs(dy) > threshold || speed > V_FLICK) go(dy < 0 ? 1 : -1)
       } else if (p.axis === 'x') {
         const speed = Math.abs(dx) / dt
-        if (Math.abs(dx) > H_COMMIT_PX || speed > H_FLICK) {
-          onCategoryChange(dx < 0 ? 1 : -1)
-        }
+        if (Math.abs(dx) > H_COMMIT_PX || speed > H_FLICK) switchCategory(dx < 0 ? 1 : -1)
       }
     },
-    [go, height, onCategoryChange]
+    [go, cardH, switchCategory]
   )
 
   /* ── 마우스 휠 / 트랙패드 ────────────────────────────────── */
@@ -155,31 +184,23 @@ export default function CardDeck({
       const w = wheel.current
       if (now < w.lockUntil) return
 
-      // 내용이 긴 카드 안에서는 카드 스크롤이 먼저다. 끝에 닿으면 그때 다음 카드로.
-      const body = e.target.closest?.('.card__body.is-scrollable')
-      if (body) {
-        const atTop = body.scrollTop <= 0
-        const atBottom = body.scrollHeight - body.clientHeight - body.scrollTop <= 1
-        if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atBottom)) return
-      }
-
       // 가로 스크롤이 뚜렷하면 카테고리 전환으로 받아들인다
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.5 && Math.abs(e.deltaX) > 24) {
-        w.lockUntil = now + 420
+        w.lockUntil = now + 520
         w.acc = 0
-        onCategoryChange(e.deltaX > 0 ? 1 : -1)
+        switchCategory(e.deltaX > 0 ? 1 : -1)
         return
       }
 
       w.acc += e.deltaY
       if (Math.abs(w.acc) > 42) {
-        w.lockUntil = now + 260
+        w.lockUntil = now + 340
         const dir = w.acc > 0 ? 1 : -1
         w.acc = 0
         go(dir)
       }
     },
-    [go, onCategoryChange]
+    [go, switchCategory]
   )
 
   /* ── 그리기 ──────────────────────────────────────────────── */
@@ -201,12 +222,13 @@ export default function CardDeck({
   const visible = []
   for (let i = from; i <= to; i++) visible.push(i)
 
-  const translateY = -index * height + drag.dy
+  const translateY = topGap - index * step + drag.dy
 
   return (
     <main
-      className={`deck ${enter} ${drag.active ? 'is-dragging' : ''}`}
+      className={`deck ${entering ? 'is-entering' : ''} ${drag.active ? 'is-dragging' : ''}`}
       ref={deckRef}
+      style={{ '--enter-from': `${enterFrom * 42}%` }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
@@ -227,7 +249,7 @@ export default function CardDeck({
               <div
                 className="deck__slot"
                 key={card.id}
-                style={{ transform: `translate3d(0, ${i * height}px, 0)` }}
+                style={{ height: cardH || undefined, transform: `translate3d(0, ${i * step}px, 0)` }}
                 aria-hidden={offset !== 0}
               >
                 <NewsCard
@@ -247,26 +269,6 @@ export default function CardDeck({
 
       <div className="deck__edge deck__edge--top" aria-hidden="true" />
       <div className="deck__edge deck__edge--bottom" aria-hidden="true" />
-
-      {index < last && !drag.active && (
-        <button
-          type="button"
-          className="deck__next"
-          onClick={() => go(1)}
-          aria-label="다음 카드"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-            <path
-              d="M6 9l6 6 6-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      )}
     </main>
   )
 }
