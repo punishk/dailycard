@@ -1,0 +1,79 @@
+# ⚠️ 이 파일은 아직 제자리가 아닙니다.
+#
+#    .github\workflows\daily.yml  로 옮겨야 GitHub 이 인식합니다.
+#
+#    프로젝트 폴더에서 터미널을 열고:
+#      mkdir .github\workflows
+#      move github-workflow-daily.yml .github\workflows\daily.yml
+#
+#    자세한 내용은 README.md 의 "폰에서 보기 → 방법 2" 를 보세요.
+# ─────────────────────────────────────────────────────────────
+
+name: 매일 뉴스 수집 후 배포
+
+on:
+  schedule:
+    # UTC 기준입니다. 21:13 UTC = 다음 날 06:13 (한국시간)
+    # 시간을 바꾸려면 "원하는 한국시간 - 9시간" 으로 계산해 넣으세요.
+    - cron: '13 21 * * *'
+  # 저장소 Actions 탭에서 직접 눌러 실행할 수도 있습니다
+  workflow_dispatch:
+  # main 에 코드를 올릴 때도 다시 배포합니다
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포가 겹치지 않게 한 번에 하나만 돌립니다
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 내려받기
+        uses: actions/checkout@v4
+
+      - name: Node 준비
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: RSS 파서 테스트
+        run: npm test
+
+      - name: 오늘의 뉴스와 상식 수집
+        # 일부 언론사가 해외 서버 접속을 막을 수 있습니다.
+        # 그래도 남은 피드로 계속 진행하되, 전부 실패하면 여기서 멈춥니다.
+        run: npm run fetch
+
+      - name: 앱 빌드
+        run: npm run build
+
+      - name: Pages 설정 읽기
+        uses: actions/configure-pages@v5
+
+      - name: 빌드 결과 업로드
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: GitHub Pages 에 배포
+        id: deployment
+        uses: actions/deploy-pages@v4

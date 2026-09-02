@@ -1,0 +1,299 @@
+# 데일리 카드 (dailynews)
+
+매일의 최신 뉴스와 상식을 **카드로 빠르게 넘겨 보는** 웹앱입니다.
+
+- **위·아래 스와이프** → 이전 / 다음 카드
+- **좌·우 스와이프** → 카테고리 전환 (주요 · 세계 · 경제 · IT과학 · 문화생활 · 상식)
+- 마우스 휠, 방향키, 터치 모두 지원
+- `S` 저장 · `Enter` 원문 열기 · `?` 사용법
+- 저장한 카드와 읽음 표시, 마지막으로 보던 위치는 브라우저에 남습니다
+
+---
+
+## 처음 한 번만
+
+```bat
+npm install
+```
+
+## 매번 쓰는 명령
+
+```bat
+npm run fetch     :: 오늘의 뉴스와 상식을 받아옴
+npm run dev       :: 앱 실행 (브라우저가 자동으로 열립니다)
+```
+
+두 개를 한 번에:
+
+```bat
+npm start
+```
+
+앱은 <http://localhost:5173> 에서 열립니다.
+
+### 그 밖의 명령
+
+| 명령 | 하는 일 |
+| --- | --- |
+| `npm run fetch:check` | 저장은 하지 않고 **피드 상태만** 점검 |
+| `npm test` | RSS 파서 단위 테스트 (인터넷 불필요) |
+| `npm run probe` | 위키백과 '상식' 소스가 어디까지 응답하는지 진단 |
+| `npm run build` | 배포용 정적 파일을 `dist/` 에 생성 |
+| `npm run preview` | 빌드 결과를 미리보기 |
+
+---
+
+## 폴더 구조
+
+```
+dayilynews/
+├─ scripts/
+│  ├─ feeds.config.mjs   ← 읽을 언론사와 카테고리 목록 (여기를 고치세요)
+│  ├─ fetch-news.mjs     ← 수집 스크립트
+│  └─ parser.test.mjs    ← RSS 파서 테스트
+├─ public/
+│  ├─ data/news.json     ← 수집 결과. fetch 할 때마다 덮어씌워집니다
+│  ├─ manifest.webmanifest ← 홈 화면 아이콘·앱 이름
+│  ├─ sw.js              ← 서비스 워커 (오프라인 캐시)
+│  ├─ icons/             ← 앱 아이콘
+│  └─ favicon.ico
+├─ src/
+│  ├─ App.jsx            ← 상태 관리, 키보드 단축키
+│  ├─ main.jsx           ← 진입점, 서비스 워커 등록
+│  ├─ styles.css         ← 전체 디자인 (테마 색은 맨 위 :root 에)
+│  ├─ components/
+│  │  ├─ CardDeck.jsx    ← 스와이프·휠 제스처 처리의 핵심
+│  │  ├─ NewsCard.jsx    ← 카드 한 장의 생김새
+│  │  ├─ CategoryRail.jsx
+│  │  ├─ TopBar.jsx
+│  │  ├─ HelpOverlay.jsx
+│  │  └─ StateScreen.jsx
+│  └─ lib/               ← localStorage, 시간 표시 유틸
+├─ github-workflow-daily.yml  ← GitHub 배포용. 아래 "방법 2"에서 제자리로 옮깁니다
+├─ fetch-daily.bat       ← 윈도우 작업 스케줄러용 실행 파일
+└─ index.html
+```
+
+---
+
+## 읽을 매체 바꾸기
+
+`scripts/feeds.config.mjs` 를 열면 카테고리와 언론사가 그대로 보입니다.
+
+```js
+{
+  id: 'tech',
+  label: 'IT·과학',
+  emoji: '🛰️',
+  accent: '#a879f0',
+  feeds: [
+    { name: 'ZDNet Korea', url: 'https://feeds.feedburner.com/zdkorea' },
+    // 이 줄을 지우면 전자신문을 안 읽습니다
+    { name: '전자신문', url: 'https://rss.etnews.com/Section901.xml' },
+  ],
+},
+```
+
+고친 뒤 `npm run fetch` 를 다시 실행하면 반영됩니다.
+
+같은 파일 아래쪽 `OPTIONS` 에서 카테고리당 카드 수, 기사 유효 기간, 제외할 키워드 등을 조절할 수 있고,
+`KNOWLEDGE` 에서 위키백과 상식 카드 개수를 정할 수 있습니다.
+
+### ⚠️ 피드가 실패한다면
+
+언론사 RSS 주소는 사이트 개편으로 종종 바뀝니다. `npm run fetch` 는 피드마다 결과를 표로 보여줍니다.
+
+```
+  피드 상태
+  ──────────────────────────────────────
+  ✅ 주요 · 연합뉴스              15건
+  ❌ 주요 · 한겨레                 0건  ← HTTP 404
+  ✅ 주요 · 경향신문              15건
+  ──────────────────────────────────────
+```
+
+실패한 줄은 자동으로 건너뛰므로 앱은 그대로 동작합니다.
+계속 실패하면 `feeds.config.mjs` 에서 그 줄을 지우거나, 해당 언론사 사이트에서 새 RSS 주소를 찾아 넣으세요.
+
+---
+
+## 매일 아침 자동으로 받아오기 (Windows)
+
+1. `fetch-daily.bat` 이 프로젝트 폴더에 들어 있습니다.
+2. **시작 → "작업 스케줄러"** 실행
+3. 오른쪽 **기본 작업 만들기** 클릭
+4. 이름: `데일리 카드 수집` → **다음**
+5. 트리거: **매일** → 시작 시간을 원하는 시각(예: 오전 7:00)으로 → **다음**
+6. 동작: **프로그램 시작** → **다음**
+7. 프로그램/스크립트에 `fetch-daily.bat` 의 전체 경로를 넣습니다:
+
+   ```
+   E:\Project\TEST WEB\dayilynews\fetch-daily.bat
+   ```
+
+   "시작 위치"에는 폴더 경로를 넣어 주세요:
+
+   ```
+   E:\Project\TEST WEB\dayilynews
+   ```
+
+8. **마침**
+
+이제 매일 아침 새 카드가 준비됩니다. `npm run dev` 로 앱만 열면 됩니다.
+
+> 수집 기록은 `fetch.log` 에 남습니다. 잘 돌았는지 확인할 때 열어 보세요.
+
+---
+
+## 문제 해결
+
+**앱에 "아직 읽을 카드가 없어요" 가 뜹니다**
+`npm run fetch` 를 아직 실행하지 않았거나, 모든 피드가 실패한 경우입니다. 터미널 메시지를 확인해 주세요.
+
+**카드가 하나도 안 넘어갑니다**
+브라우저 콘솔(F12)에 오류가 있는지 확인해 주세요. `npm test` 로 파서만 따로 점검할 수도 있습니다.
+
+**기사가 너무 오래된 것만 보입니다**
+`feeds.config.mjs` 의 `OPTIONS.maxAgeHours` 를 줄여 보세요 (기본 48시간).
+
+**같은 기사가 여러 번 나옵니다**
+제목이 다르면 다른 기사로 봅니다. `OPTIONS.maxPerFeed` 를 줄이면 한 언론사가 차지하는 비중이 줄어듭니다.
+
+**저장한 카드를 지우고 싶습니다**
+저장함에서 해당 카드의 책갈피 아이콘을 다시 누르면 빠집니다. 전부 지우려면 브라우저 개발자도구 →
+Application → Local Storage 에서 `dailycard:` 로 시작하는 항목을 삭제하세요.
+
+---
+
+## 폰에서 보기
+
+### 방법 1. 같은 와이파이 (지금 바로)
+
+```bat
+npm run dev -- --host
+```
+
+터미널에 나오는 `Network: http://192.168.x.x:5173/` 주소를 폰 브라우저에 입력하면 열립니다.
+처음 실행할 때 Windows 방화벽 창이 뜨면 **개인 네트워크**에 체크하고 허용해 주세요.
+
+PC가 켜져 있고 같은 와이파이일 때만 됩니다.
+
+### 방법 2. GitHub Pages — 어디서든, 매일 자동 갱신
+
+한 번 설정해 두면 GitHub가 **매일 아침 6시 13분(한국시간)에 알아서 뉴스를 수집하고 새로 배포**합니다.
+PC를 꺼두어도, 지하철에서도 열립니다. 무료입니다.
+
+**① 저장소 만들기**
+
+[github.com](https://github.com) 에 로그인 → 오른쪽 위 **+** → **New repository**
+
+- Repository name: `dailycard` (원하는 이름으로)
+- **Public** 선택 (무료 계정은 공개 저장소에서만 Pages를 쓸 수 있습니다)
+- 나머지는 건드리지 말고 **Create repository**
+
+**② 워크플로 파일을 제자리로 옮기기** *(처음 한 번만)*
+
+프로젝트 폴더에 `github-workflow-daily.yml` 파일이 있습니다. 이걸 `.github/workflows/daily.yml`
+위치로 옮겨야 GitHub이 인식합니다.
+
+> ⚠️ **Git Bash 와 명령 프롬프트는 경로 구분자가 다릅니다.**
+> Git Bash 에서는 반드시 슬래시(`/`)를 쓰세요. 역슬래시(`\`)는 이스케이프 문자로 해석돼서
+> `.github\workflows` 가 `.githubworkflows` 라는 엉뚱한 폴더 하나로 붙어버립니다.
+
+**Git Bash 를 쓰신다면:**
+
+```bash
+mkdir -p .github/workflows
+mv github-workflow-daily.yml .github/workflows/daily.yml
+```
+
+**명령 프롬프트(cmd)나 PowerShell 을 쓰신다면:**
+
+```bat
+mkdir .github\workflows
+move github-workflow-daily.yml .github\workflows\daily.yml
+```
+
+> 탐색기로 직접 만들어 옮겨도 됩니다. 폴더 이름 앞의 점(`.`)을 빠뜨리지 마세요.
+> 이미 `.githubworkflows` 라는 폴더가 생겼다면 Git Bash 에서 이렇게 되돌립니다:
+>
+> ```bash
+> mkdir -p .github/workflows
+> mv .githubworkflows/workflows/daily.yml .github/workflows/daily.yml
+> rm -rf .githubworkflows
+> ```
+
+**③ 커밋할 이름 알려주기** *(처음 한 번만)*
+
+Git 은 커밋에 적을 이름과 이메일을 모르면 커밋을 거부합니다.
+`unable to auto-detect email address (got ' 계정명@컴퓨터이름 ')` 라고 나오는 게 그 경우입니다.
+
+```bash
+git config --global user.name "본인 GitHub 아이디"
+git config --global user.email "본인 이메일"
+```
+
+> 공개 저장소라 커밋에 적힌 이메일이 노출됩니다. 숨기려면 GitHub → **Settings → Emails** 에서
+> *Keep my email addresses private* 를 켜고, 거기 표시되는
+> `숫자+아이디@users.noreply.github.com` 주소를 위 `user.email` 에 넣으세요.
+
+**④ 코드 올리기**
+
+프로젝트 폴더에서 터미널을 열고 (`<계정명>` 과 `<저장소이름>` 은 본인 것으로):
+
+```bash
+git init
+git add -A
+git commit -m "데일리 카드 첫 커밋"
+git branch -M main
+git remote add origin https://github.com/<계정명>/<저장소이름>.git
+git push -u origin main
+```
+
+`git push` 를 하면 **브라우저 창이 떠서 GitHub 로그인을 요청**합니다. 거기서 로그인하면 됩니다 —
+터미널에 비밀번호를 입력하는 방식이 아닙니다.
+
+> `git` 이 없다고 나오면 <https://git-scm.com/download/win> 에서 설치한 뒤 터미널을 새로 여세요.
+> `git init` 을 이미 하셨다면 그 줄은 건너뛰어도 됩니다 (다시 해도 문제는 없습니다).
+
+**⑤ Pages 켜기**
+
+저장소 페이지 → **Settings** → 왼쪽 **Pages** → **Source** 를 **GitHub Actions** 로 변경
+
+**⑥ 첫 배포 돌리기**
+
+저장소 **Actions** 탭 → 왼쪽에서 **매일 뉴스 수집 후 배포** → 오른쪽 **Run workflow**
+
+2~3분 뒤 아래 주소에서 열립니다:
+
+```
+https://<계정명>.github.io/<저장소이름>/
+```
+
+이 주소를 폰에서 열고 홈 화면에 추가하면 끝입니다.
+
+> **확인할 점** — 수집이 GitHub의 해외 서버에서 돌기 때문에 일부 언론사가 접속을 막을 수 있습니다.
+> Actions 실행 기록을 열면 PC에서 보던 것과 같은 피드 상태 표가 나옵니다. ❌ 가 많으면
+> `scripts/feeds.config.mjs` 에서 그 매체를 빼고 잘 되는 매체를 늘리세요.
+
+**수집 시각 바꾸기** — `.github/workflows/daily.yml` 의 `cron` 값을 고칩니다.
+UTC 기준이라 **원하는 한국시간에서 9시간을 뺀 값**을 넣습니다.
+
+| 원하는 시각(한국) | cron |
+| --- | --- |
+| 오전 6시 13분 | `13 21 * * *` |
+| 오전 7시 30분 | `30 22 * * *` |
+| 오전 8시 | `0 23 * * *` |
+| 오후 6시 | `0 9 * * *` |
+
+### 방법 3. 홈 화면에 추가 (앱처럼)
+
+방법 1이든 2든, 폰에서 열린 뒤:
+
+- **아이폰** — 사파리 아래쪽 공유 버튼 → “홈 화면에 추가”
+- **안드로이드** — 크롬 메뉴(⋮) → “홈 화면에 추가” (또는 앱 위쪽의 **홈 화면에 추가** 버튼)
+
+홈 화면에서 열면 주소창 없이 전체화면으로 뜨고, **한 번 본 카드는 네트워크가 끊겨도 다시 열립니다.**
+기사 썸네일도 최근 120장까지 저장해 둡니다.
+
+> 저장한 카드와 읽음 표시는 기기의 브라우저에 저장됩니다. PC와 폰이 각각 따로 관리돼요.

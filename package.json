@@ -1,0 +1,25 @@
+{
+  "name": "dailynews",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "매일 최신 뉴스와 상식을 카드로 빠르게 넘겨 보는 웹앱",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test scripts/parser.test.mjs",
+    "fetch": "node scripts/fetch-news.mjs",
+    "fetch:check": "node scripts/fetch-news.mjs --check",
+    "probe": "node scripts/probe-wiki.mjs",
+    "start": "npm run fetch && npm run dev"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}

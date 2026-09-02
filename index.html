@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="description" content="매일의 최신 뉴스와 상식을 카드로 빠르게 넘겨 보는 웹앱" />
+
+    <!-- 주소 표시줄 색 (앱 안에서 테마를 바꾸면 자바스크립트가 갱신합니다) -->
+    <meta name="theme-color" content="#0a0c11" />
+
+    <!-- 홈 화면 추가 -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="icons/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+    <!-- iOS 전체화면 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="데일리 카드" />
+
+    <title>데일리 카드 · 오늘의 뉴스와 상식</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
