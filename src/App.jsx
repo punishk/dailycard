@@ -25,6 +25,7 @@ export default function App() {
   const [online, setOnline] = useState(() => navigator.onLine !== false)
   const [installPrompt, setInstallPrompt] = useState(null)
   const [catDir, setCatDir] = useState(0)
+  const [scrubbing, setScrubbing] = useState(false)
 
   /* ── 데이터 불러오기 ─────────────────────────────────────── */
 
@@ -66,8 +67,10 @@ export default function App() {
     writeJSON('bookmarks', bookmarks)
   }, [bookmarks])
 
+  // 스크러버를 끄는 동안에는 위치가 매 프레임 바뀌므로, 잠잠해진 뒤에 한 번만 저장한다
   useEffect(() => {
-    writeJSON('position', indexByCat)
+    const t = setTimeout(() => writeJSON('position', indexByCat), 250)
+    return () => clearTimeout(t)
   }, [indexByCat])
 
   // 읽음 기록은 최근 1500개만 유지한다
@@ -302,6 +305,7 @@ export default function App() {
         generatedAt={data.generatedAt}
         total={cards.length}
         current={cards.length ? cardIndex + 1 : 0}
+        cards={cards}
         theme={theme}
         online={online}
         canInstall={Boolean(installPrompt)}
@@ -309,6 +313,9 @@ export default function App() {
         onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
         onRefresh={() => load(true)}
         onHelp={() => setShowHelp(true)}
+        onSeek={setCardIndex}
+        onScrubChange={setScrubbing}
+        onFirst={() => setCardIndex(0)}
       />
 
       <CategoryRail
@@ -324,6 +331,7 @@ export default function App() {
         accent={category?.accent}
         categoryLabel={category?.label}
         enterFrom={catDir}
+        scrubbing={scrubbing}
         bookmarkSet={bookmarkSet}
         seen={seen}
         onIndexChange={setCardIndex}

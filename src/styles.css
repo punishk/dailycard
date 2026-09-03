@@ -90,6 +90,8 @@ code {
 /* ── 상단 바 ─────────────────────────────────────────────── */
 
 .topbar {
+  position: relative;
+  z-index: 10;
   padding: max(12px, env(safe-area-inset-top)) 16px 0;
 }
 
@@ -187,19 +189,96 @@ code {
   margin: 0 2px;
 }
 
-.topbar__progress {
-  height: 2px;
-  margin-top: 10px;
-  border-radius: 2px;
-  background: var(--border);
-  overflow: hidden;
+/* ── 진행 막대 겸 스크러버 ───────────────────────────────── */
+
+.scrub {
+  position: relative;
+  z-index: 20;
 }
 
-.topbar__progressFill {
+/* 손가락으로 잡기 쉽도록 보이는 것보다 넓은 터치 영역을 준다 */
+.scrub__hit {
+  padding: 12px 0 10px;
+  touch-action: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scrub__track {
+  position: relative;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.scrub__fill {
   height: 100%;
+  border-radius: 3px;
   background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.28s cubic-bezier(0.22, 0.8, 0.3, 1);
+  transition: width 0.3s cubic-bezier(0.16, 0.86, 0.24, 1.04);
+}
+
+.scrub__knob {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+  transition:
+    left 0.3s cubic-bezier(0.16, 0.86, 0.24, 1.04),
+    transform 0.16s ease;
+}
+
+/* 끄는 동안에는 손가락을 즉시 따라가야 한다 */
+.scrub.is-scrubbing .scrub__fill,
+.scrub.is-scrubbing .scrub__knob {
+  transition: transform 0.16s ease;
+}
+
+.scrub.is-scrubbing .scrub__knob {
+  transform: translate(-50%, -50%) scale(1.55);
+}
+
+.scrub.is-scrubbing .scrub__track {
+  background: color-mix(in srgb, var(--accent) 26%, var(--border));
+}
+
+.scrub__bubble {
+  position: absolute;
+  top: 30px;
+  transform: translateX(-50%);
+  width: min(250px, 74vw);
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  animation: rise 0.16s ease;
+}
+
+.scrub__bubbleNum {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+
+.scrub__bubbleTitle {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  word-break: keep-all;
 }
 
 /* ── 아이콘 버튼 ─────────────────────────────────────────── */
@@ -840,6 +919,15 @@ html[data-theme='light'] .rail__chip.is-active {
   }
   .card__actions {
     margin: 0 28px;
+  }
+}
+
+/* ── 좁은 폰 화면 ────────────────────────────────────────── */
+
+@media (max-width: 430px) {
+  /* 자리가 빠듯하다. 수집 시각은 카드마다 뜨는 "2시간 전" 과 겹치므로 뺀다 */
+  .topbar__updated {
+    display: none;
   }
 }
 

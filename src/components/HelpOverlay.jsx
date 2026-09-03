@@ -20,6 +20,16 @@ export default function HelpOverlay({ onClose }) {
             </div>
           </li>
           <li>
+            <span className="overlay__gesture" aria-hidden="true">⇥</span>
+            <div>
+              <strong>맨 위 막대를 끌면 건너뛰기</strong>
+              <p>
+                제목을 미리 보면서 원하는 카드로 단번에 갑니다. 막대를 톡 눌러도 그 지점으로
+                이동하고, 왼쪽 <kbd>⤒</kbd> 버튼은 첫 카드로 돌아갑니다.
+              </p>
+            </div>
+          </li>
+          <li>
             <span className="overlay__gesture" aria-hidden="true">🔖</span>
             <div>
               <strong>저장</strong>

@@ -1,9 +1,11 @@
 import { todayLabel, updatedLabel } from '../lib/time.js'
+import Scrubber from './Scrubber.jsx'
 
 export default function TopBar({
   generatedAt,
   total,
   current,
+  cards,
   theme,
   online = true,
   canInstall = false,
@@ -11,9 +13,12 @@ export default function TopBar({
   onToggleTheme,
   onRefresh,
   onHelp,
+  onSeek,
+  onScrubChange,
+  onFirst,
 }) {
-  const progress = total > 0 ? (current / total) * 100 : 0
   const updated = updatedLabel(generatedAt)
+  const atFirst = current <= 1
 
   return (
     <header className="topbar">
@@ -35,13 +40,41 @@ export default function TopBar({
             </button>
           )}
 
+          {!atFirst && (
+            <button
+              type="button"
+              className="iconBtn"
+              onClick={onFirst}
+              title="첫 카드로 (Home)"
+              aria-label="첫 카드로"
+            >
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+                <path
+                  d="M5 4.5h14M12 20V9M12 9l-4.5 4.5M12 9l4.5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  transform="rotate(180 12 12)"
+                />
+              </svg>
+            </button>
+          )}
+
           <span className="topbar__count">
             {current}
             <span className="topbar__countSlash">/</span>
             {total}
           </span>
 
-          <button type="button" className="iconBtn" onClick={onRefresh} title="데이터 다시 읽기" aria-label="데이터 다시 읽기">
+          <button
+            type="button"
+            className="iconBtn"
+            onClick={onRefresh}
+            title="데이터 다시 읽기"
+            aria-label="데이터 다시 읽기"
+          >
             <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
               <path
                 d="M20 11a8 8 0 10-2.3 5.7M20 6v5h-5"
@@ -100,9 +133,13 @@ export default function TopBar({
         </div>
       </div>
 
-      <div className="topbar__progress" aria-hidden="true">
-        <div className="topbar__progressFill" style={{ width: `${progress}%` }} />
-      </div>
+      <Scrubber
+        total={total}
+        index={Math.max(0, current - 1)}
+        cards={cards}
+        onSeek={onSeek}
+        onScrubChange={onScrubChange}
+      />
     </header>
   )
 }

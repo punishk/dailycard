@@ -113,6 +113,129 @@ function normalizeTitle(title = '') {
 }
 
 /* ────────────────────────────────────────────────────────────
+ * 중복 걸러내기
+ *
+ * 같은 사건을 언론사마다 조금씩 다른 제목으로 씁니다.
+ *   "한국은행, 기준금리 연 2.50% 동결"
+ *   "한은 기준금리 2.50% 동결…'물가 더 지켜본다'"
+ * 글자를 두 개씩 끊어 만든 집합이 얼마나 겹치는지(자카드 유사도) 보면
+ * 이런 쌍을 같은 기사로 묶을 수 있습니다.
+ * ──────────────────────────────────────────────────────────── */
+
+/** 추적용 쿼리스트링과 끝 슬래시를 떼어 링크를 정규화한다 */
+function normalizeLink(url = '') {
+  try {
+    const u = new URL(url)
+    u.hash = ''
+    u.search = ''
+    let s = u.toString()
+    if (s.endsWith('/')) s = s.slice(0, -1)
+    return s.toLowerCase()
+  } catch {
+    return String(url).trim().toLowerCase()
+  }
+}
+
+/** 제목을 글자 2-gram 집합으로 */
+function titleGrams(title = '') {
+  const t = normalizeTitle(title)
+  const set = new Set()
+  for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2))
+  return set
+}
+
+/** 두 집합이 겹치는 정도 (0 = 전혀 다름, 1 = 완전히 같음) */
+function jaccard(a, b) {
+  if (!a.size || !b.size) return 0
+  let inter = 0
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a]
+  for (const x of small) if (large.has(x)) inter++
+  return inter / (a.size + b.size - inter)
+}
+
+/** 짧은 쪽이 긴 쪽에 얼마나 담겨 있는가 — 뒤에 설명이 덧붙은 제목을 잡아낸다 */
+function containment(a, b) {
+  if (!a.size || !b.size) return 0
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a]
+  let inter = 0
+  for (const x of small) if (large.has(x)) inter++
+  return inter / small.size
+}
+
+/**
+ * 같은 기사인지 판정하는 기준.
+ * 실제 한국어 헤드라인 표본으로 맞춘 값이며, scripts/parser.test.mjs 가 지켜 준다.
+ * 놓치는 것보다 서로 다른 기사를 잘못 묶는 쪽이 훨씬 나쁘므로 보수적으로 잡았다.
+ * ("李 대통령 방미" 와 "李 대통령 방일" 은 많이 닮았지만 다른 기사다)
+ */
+const DUP = {
+  jaccard: 0.65, // 전체적으로 이만큼 닮았으면 같은 기사
+  containment: 0.55, // 짧은 쪽이 긴 쪽에 이만큼 담겨 있고
+  containmentMinGrams: 10, //   제목이 이만큼 길면 같은 기사
+  nearFull: 0.95, // 짧은 쪽이 거의 통째로 담겨 있고
+  nearFullMinGrams: 6, //   제목이 아주 짧지만 않으면 같은 기사
+}
+
+/** 두 제목이 같은 사건을 가리키는가 */
+export function isSameStory(titleA, titleB, opts = DUP) {
+  const a = titleGrams(titleA)
+  const b = titleGrams(titleB)
+  if (!a.size || !b.size) return false
+  const n = Math.min(a.size, b.size)
+  if (jaccard(a, b) >= opts.jaccard) return true
+  const c = containment(a, b)
+  if (c >= opts.containment && n >= opts.containmentMinGrams) return true
+  if (c >= opts.nearFull && n >= opts.nearFullMinGrams) return true
+  return false
+}
+
+/**
+ * 이미 담은 기사들을 기억해 두고 중복인지 알려주는 등록부.
+ * 카테고리를 넘나들며 같은 기사가 또 나오는 것도 여기서 막는다.
+ */
+export function createDedupe() {
+  const links = new Set()
+  const keys = new Set()
+  const grams = []
+
+  const check = (g) => {
+    const n0 = g.size
+    for (const prev of grams) {
+      const n = Math.min(n0, prev.size)
+      if (jaccard(g, prev) >= DUP.jaccard) return true
+      const c = containment(g, prev)
+      if (c >= DUP.containment && n >= DUP.containmentMinGrams) return true
+      if (c >= DUP.nearFull && n >= DUP.nearFullMinGrams) return true
+    }
+    return false
+  }
+
+  return {
+    /** 이미 담은 것과 같은 기사인가 */
+    isDuplicate(item) {
+      const key = normalizeTitle(item.title || '')
+      if (!key) return true
+      if (links.has(normalizeLink(item.link || ''))) return true
+      if (keys.has(key)) return true
+      const g = titleGrams(item.title || '')
+      return g.size ? check(g) : false
+    },
+
+    /** 담은 기사로 등록 */
+    add(item) {
+      links.add(normalizeLink(item.link || ''))
+      keys.add(normalizeTitle(item.title || ''))
+      const g = titleGrams(item.title || '')
+      if (g.size) grams.push(g)
+    },
+
+    get size() {
+      return keys.size
+    },
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
  * 아주 관대한 RSS / Atom 파서
  * ──────────────────────────────────────────────────────────── */
 
@@ -493,8 +616,9 @@ function isExcluded(title) {
   return OPTIONS.excludeKeywords.some((k) => title.includes(k))
 }
 
-async function collectCategory(cat, report) {
-  const results = await Promise.all(
+/** 한 카테고리의 피드들을 받아오기만 한다 (중복 걸러내기는 나중에 한꺼번에) */
+async function fetchCategory(cat, report) {
+  return Promise.all(
     cat.feeds.map(async (feed) => {
       try {
         const xml = await fetchText(feed.url)
@@ -513,10 +637,14 @@ async function collectCategory(cat, report) {
       }
     })
   )
+}
 
+/**
+ * 한 카테고리를 카드 목록으로 만든다.
+ * dedupe 는 모든 카테고리가 함께 쓰기 때문에, 앞 카테고리에 이미 실린 기사는 여기서 빠진다.
+ */
+function mergeCategory(cat, results, dedupe, stats) {
   const cutoff = OPTIONS.maxAgeHours > 0 ? Date.now() - OPTIONS.maxAgeHours * 3600_000 : null
-  const seenTitle = new Set()
-  const seenLink = new Set()
   const merged = []
 
   // 피드별로 한 개씩 번갈아 뽑아, 한 언론사가 화면을 독점하지 않게 한다
@@ -528,11 +656,11 @@ async function collectCategory(cat, report) {
       if (isExcluded(item.title)) continue
       if (cutoff && item.publishedAt && Date.parse(item.publishedAt) < cutoff) continue
 
-      const tKey = normalizeTitle(item.title)
-      if (!tKey || seenTitle.has(tKey)) continue
-      if (seenLink.has(item.link)) continue
-      seenTitle.add(tKey)
-      seenLink.add(item.link)
+      if (dedupe.isDuplicate(item)) {
+        stats.dropped++
+        continue
+      }
+      dedupe.add(item)
 
       merged.push({
         id: hashId(cat.id, item.link, item.title),
@@ -572,16 +700,29 @@ async function main() {
   console.log(`\n📥 뉴스와 상식을 모으는 중… (${new Date().toLocaleString('ko-KR')})`)
 
   const report = []
-  const [newsByCat, knowledgeCards] = await Promise.all([
-    Promise.all(CATEGORIES.map((cat) => collectCategory(cat, report))),
+  const [rawByCat, knowledgeCards] = await Promise.all([
+    Promise.all(CATEGORIES.map((cat) => fetchCategory(cat, report))),
     collectKnowledge(report),
   ])
+
+  /* 중복은 카테고리를 넘나들며 한 번만 싣는다.
+     fillLast 로 표시한 카테고리(주요)를 맨 나중에 채워야
+     세계·경제·IT 가 자기 기사를 주요에 뺏기지 않는다. */
+  const dedupe = createDedupe()
+  const stats = { dropped: 0 }
+  const mergedByCat = new Array(CATEGORIES.length)
+  const order = CATEGORIES.map((_, i) => i).sort(
+    (a, b) => (CATEGORIES[a].fillLast ? 1 : 0) - (CATEGORIES[b].fillLast ? 1 : 0)
+  )
+  for (const i of order) {
+    mergedByCat[i] = mergeCategory(CATEGORIES[i], rawByCat[i], dedupe, stats)
+  }
 
   const categories = []
   const cards = []
 
   CATEGORIES.forEach((cat, i) => {
-    const list = newsByCat[i]
+    const list = mergedByCat[i]
     if (!list.length) return
     categories.push({ id: cat.id, label: cat.label, emoji: cat.emoji, accent: cat.accent, count: list.length })
     cards.push(...list)
@@ -619,6 +760,7 @@ async function main() {
   console.log(
     `\n  총 ${cards.length}장의 카드 · ${categories.length}개 카테고리 · ${((Date.now() - started) / 1000).toFixed(1)}초`
   )
+  console.log(`  중복으로 걸러낸 기사 ${stats.dropped}건`)
   console.log('  ' + categories.map((c) => `${c.emoji} ${c.label} ${c.count}`).join('   '))
 
   if (CHECK_ONLY) {
@@ -633,7 +775,19 @@ async function main() {
 }
 
 // 테스트에서 불러다 쓸 수 있도록 내보낸다
-export { parseFeed, toPlainText, decodeEntities, clamp, normalizeTitle, extractImage, extractLink, extractEntries }
+export {
+  parseFeed,
+  toPlainText,
+  decodeEntities,
+  clamp,
+  normalizeTitle,
+  normalizeLink,
+  titleGrams,
+  jaccard,
+  extractImage,
+  extractLink,
+  extractEntries,
+}
 
 const isEntry =
   process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))

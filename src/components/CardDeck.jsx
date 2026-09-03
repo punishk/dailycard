@@ -37,6 +37,7 @@ export default function CardDeck({
   accent,
   categoryLabel,
   enterFrom = 0,
+  scrubbing = false,
   bookmarkSet,
   seen,
   onIndexChange,
@@ -226,7 +227,9 @@ export default function CardDeck({
 
   return (
     <main
-      className={`deck ${entering ? 'is-entering' : ''} ${drag.active ? 'is-dragging' : ''}`}
+      className={`deck ${entering ? 'is-entering' : ''} ${
+        drag.active || scrubbing ? 'is-dragging' : ''
+      }`}
       ref={deckRef}
       style={{ '--enter-from': `${enterFrom * 42}%` }}
       onPointerDown={onPointerDown}

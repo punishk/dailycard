@@ -19,6 +19,9 @@ export const CATEGORIES = [
     label: '주요',
     emoji: '📰',
     accent: '#5b8cff',
+    // 다른 카테고리를 다 채운 뒤 남은 기사로 채운다.
+    // 이렇게 해야 세계·경제 기사가 주요에도 또 뜨는 일이 없다.
+    fillLast: true,
     feeds: [
       { name: '연합뉴스', url: 'https://www.yna.co.kr/rss/news.xml' },
       { name: '한겨레', url: 'https://www.hani.co.kr/rss/' },
