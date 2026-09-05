@@ -8,20 +8,25 @@ export default function NewsCard({
   accent,
   bookmarked,
   seenAlready,
+  revealed = false,
   onToggleBookmark,
+  onReveal,
 }) {
   const [imageFailed, setImageFailed] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const hasImage = Boolean(card.image) && !imageFailed
-  // 뉴스 / 상식 / 따뜻한 이야기에 따라 카드 바탕색이 조금씩 다르다
-  const variant = card.kind === 'knowledge' || card.kind === 'warm' ? card.kind : 'news'
+  const isQuiz = card.kind === 'quiz'
+  // 뉴스 / 상식 / 따뜻한 이야기 / 오늘의 문제에 따라 카드 바탕색이 조금씩 다르다
+  const variant = ['knowledge', 'warm', 'quiz'].includes(card.kind) ? card.kind : 'news'
 
   async function share() {
-    const text = `${card.title}\n${card.link}`
+    const text = isQuiz
+      ? `${card.title}\n정답: ${card.answer}`
+      : `${card.title}\n${card.link}`
     try {
       if (navigator.share) {
-        await navigator.share({ title: card.title, url: card.link })
+        await navigator.share(isQuiz ? { text } : { title: card.title, url: card.link })
         return
       }
       await navigator.clipboard.writeText(text)
@@ -40,6 +45,7 @@ export default function NewsCard({
         `card--${variant}`,
         hasImage ? 'has-image' : 'no-image',
         seenAlready && !active ? 'is-seen' : '',
+        isQuiz && revealed ? 'is-revealed' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -64,10 +70,11 @@ export default function NewsCard({
       <div className="card__body">
         <header className="card__meta">
           <span className="card__badge">{card.badge || card.source}</span>
-          {!card.badge && card.publishedAt && (
+          {isQuiz && card.source && <span className="card__time">{card.source}</span>}
+          {!isQuiz && !card.badge && card.publishedAt && (
             <span className="card__time">{timeAgo(card.publishedAt)}</span>
           )}
-          {card.badge && card.source && <span className="card__time">{card.source}</span>}
+          {!isQuiz && card.badge && card.source && <span className="card__time">{card.source}</span>}
           {seenAlready && !active && (
             <span className="card__seen" title="이미 본 카드">
               읽음
@@ -77,38 +84,93 @@ export default function NewsCard({
 
         <h2 className="card__title">{card.title}</h2>
 
-        <div className="card__text">
-          {card.summary ? (
-            <p className="card__summary">{card.summary}</p>
-          ) : (
-            <p className="card__summary card__summary--muted">
-              요약이 제공되지 않는 기사예요. 아래에서 원문을 열어 보세요.
-            </p>
-          )}
-          <span className="card__textFade" aria-hidden="true" />
-        </div>
+        {isQuiz ? (
+          <div className="card__text">
+            {revealed ? (
+              <div className="quiz__answerBox">
+                <div className="quiz__answerLabel">정답</div>
+                <p className="quiz__answer">{card.answer}</p>
+                {card.explain && <p className="quiz__explain">{card.explain}</p>}
+              </div>
+            ) : (
+              <p className="quiz__prompt">
+                <span className="quiz__promptEmoji" aria-hidden="true">
+                  🤔
+                </span>
+                먼저 생각해 보고, 카드를 톡 눌러 정답을 확인하세요.
+              </p>
+            )}
+            <span className="card__textFade" aria-hidden="true" />
+          </div>
+        ) : (
+          <div className="card__text">
+            {card.summary ? (
+              <p className="card__summary">{card.summary}</p>
+            ) : (
+              <p className="card__summary card__summary--muted">
+                요약이 제공되지 않는 기사예요. 아래에서 원문을 열어 보세요.
+              </p>
+            )}
+            <span className="card__textFade" aria-hidden="true" />
+          </div>
+        )}
       </div>
 
       <footer className="card__actions">
-        <a
-          className="card__open"
-          href={card.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          tabIndex={active ? 0 : -1}
-        >
-          원문 보기
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              d="M7 17L17 7M17 7H9M17 7v8"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </a>
+        {isQuiz ? (
+          <button
+            type="button"
+            className={`card__open card__reveal ${revealed ? 'is-on' : ''}`}
+            onClick={onReveal}
+            tabIndex={active ? 0 : -1}
+            aria-expanded={revealed}
+          >
+            {revealed ? '문제 다시 보기' : '정답 보기'}
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              {revealed ? (
+                <path
+                  d="M6 15l6-6 6 6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ) : (
+                <path
+                  d="M6 9l6 6 6-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+            </svg>
+          </button>
+        ) : card.link ? (
+          <a
+            className="card__open"
+            href={card.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            tabIndex={active ? 0 : -1}
+          >
+            원문 보기
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path
+                d="M7 17L17 7M17 7H9M17 7v8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </a>
+        ) : (
+          <span />
+        )}
 
         <div className="card__iconRow">
           <button
@@ -135,8 +197,8 @@ export default function NewsCard({
             type="button"
             className="iconBtn"
             onClick={share}
-            aria-label="링크 복사"
-            title="링크 복사"
+            aria-label={isQuiz ? '문제 복사' : '링크 복사'}
+            title={isQuiz ? '문제 복사' : '링크 복사'}
             tabIndex={active ? 0 : -1}
           >
             {copied ? (

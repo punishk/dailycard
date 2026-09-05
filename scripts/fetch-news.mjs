@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 
 import { CATEGORIES, KNOWLEDGE, OPTIONS, WARM_FILTER } from './feeds.config.mjs'
+import { buildKidsCards, KIDS_CATEGORY } from './kids.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -781,6 +782,30 @@ async function main() {
         ...c,
       }))
     )
+  }
+
+  /* ── '오늘의 문제' — 인터넷이 아니라 문제 은행에서 가져온다 ─── */
+  try {
+    const { cards: kidsCards, total } = await buildKidsCards()
+    if (kidsCards.length) {
+      categories.push({ ...KIDS_CATEGORY, count: kidsCards.length })
+      cards.push(...kidsCards)
+      report.push({
+        label: '오늘의 문제 · 문제 은행',
+        ok: true,
+        count: kidsCards.length,
+        error: null,
+        note: `은행 ${total}문항`,
+      })
+    }
+  } catch (err) {
+    // 문제 은행이 잘못돼도 뉴스는 그대로 나가야 한다
+    report.push({
+      label: '오늘의 문제 · 문제 은행',
+      ok: false,
+      count: 0,
+      error: err.problems ? `${err.problems.length}곳 이상 (npm test 로 확인)` : err.message,
+    })
   }
 
   printReport(report)

@@ -10,6 +10,26 @@ import { readJSON, writeJSON, readString, writeString } from './lib/storage.js'
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/news.json`
 const SAVED_ID = '__saved__'
+const KIDS_ID = 'kids'
+
+/**
+ * 키즈 모드 첫 상태를 정한다.
+ * 주소 뒤에 ?kids 를 붙이면 켜지고 ?kids=0 이면 꺼집니다. 그 선택은 기억됩니다.
+ * 아이 폰에는 ?kids 를 붙인 주소로 홈 화면에 추가해 주면 됩니다.
+ */
+function initialKidsMode() {
+  try {
+    const q = new URLSearchParams(window.location.search)
+    if (q.has('kids')) {
+      const on = q.get('kids') !== '0' && q.get('kids') !== 'false'
+      writeString('kidsMode', on ? '1' : '0')
+      return on
+    }
+  } catch {
+    /* 주소를 못 읽어도 저장된 값으로 넘어간다 */
+  }
+  return readString('kidsMode', '0') === '1'
+}
 
 export default function App() {
   const [status, setStatus] = useState('loading') // loading | ready | error
@@ -26,6 +46,8 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState(null)
   const [catDir, setCatDir] = useState(0)
   const [scrubbing, setScrubbing] = useState(false)
+  const [revealed, setRevealed] = useState(() => new Set())
+  const [kidsMode, setKidsMode] = useState(initialKidsMode)
 
   /* ── 데이터 불러오기 ─────────────────────────────────────── */
 
@@ -127,6 +149,9 @@ export default function App() {
 
   /* ── 파생 상태 ───────────────────────────────────────────── */
 
+  // 지금 보고 있는 카드. 콜백에서 최신 값을 읽으려고 ref 에 담아 둔다.
+  const activeCardRef = useRef(null)
+
   const bookmarkSet = useMemo(() => new Set(bookmarks), [bookmarks])
 
   const cardsById = useMemo(() => {
@@ -135,14 +160,23 @@ export default function App() {
     return map
   }, [data])
 
+  const hasKidsTab = useMemo(
+    () => (data?.categories ?? []).some((c) => c.id === KIDS_ID),
+    [data]
+  )
+
   const categories = useMemo(() => {
     const base = data?.categories ?? []
+    // 키즈 모드에서는 '오늘의 문제' 탭만 남긴다. 뉴스에는 아이에게 맞지 않는 기사가 있을 수 있다.
+    if (kidsMode && base.some((c) => c.id === KIDS_ID)) {
+      return base.filter((c) => c.id === KIDS_ID)
+    }
     if (!bookmarks.length) return base
     return [
       ...base,
       { id: SAVED_ID, label: '저장함', emoji: '🔖', accent: '#f0b84b', count: bookmarks.length },
     ]
-  }, [data, bookmarks.length])
+  }, [data, bookmarks.length, kidsMode])
 
   const cardsByCat = useMemo(() => {
     const map = new Map()
@@ -166,6 +200,8 @@ export default function App() {
   const cards = (category && cardsByCat.get(category.id)) || []
 
   const cardIndex = Math.min(Math.max(0, indexByCat[category?.id] ?? 0), Math.max(0, cards.length - 1))
+
+  activeCardRef.current = cards[cardIndex] ?? null
 
   /* ── 조작 ────────────────────────────────────────────────── */
 
@@ -205,6 +241,37 @@ export default function App() {
     setBookmarks((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }, [])
 
+  const toggleReveal = useCallback((id) => {
+    setRevealed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else {
+        next.add(id)
+        try {
+          if (navigator.vibrate) navigator.vibrate(6)
+        } catch {
+          /* 진동을 지원하지 않는 기기는 넘어간다 */
+        }
+      }
+      return next
+    })
+  }, [])
+
+  // 카드를 톡 누르면 퀴즈 카드의 정답이 열린다
+  const handleTap = useCallback(() => {
+    const card = activeCardRef.current
+    if (card?.kind === 'quiz') toggleReveal(card.id)
+  }, [toggleReveal])
+
+  const toggleKidsMode = useCallback(() => {
+    setKidsMode((on) => {
+      const next = !on
+      writeString('kidsMode', next ? '1' : '0')
+      setCatIndex(0)
+      return next
+    })
+  }, [])
+
   const markSeen = useCallback((id) => {
     setSeen((prev) => {
       if (prev.has(id)) return prev
@@ -222,7 +289,15 @@ export default function App() {
   /* ── 키보드 ──────────────────────────────────────────────── */
 
   const handlers = useRef({})
-  handlers.current = { setCardIndex, changeCategory, cardIndex, cards, category, toggleBookmark }
+  handlers.current = {
+    setCardIndex,
+    changeCategory,
+    cardIndex,
+    cards,
+    category,
+    toggleBookmark,
+    toggleReveal,
+  }
 
   useEffect(() => {
     function onKey(e) {
@@ -272,7 +347,14 @@ export default function App() {
         }
         case 'Enter': {
           const card = h.cards[h.cardIndex]
-          if (card?.link) window.open(card.link, '_blank', 'noopener,noreferrer')
+          if (!card) break
+          // 퀴즈 카드는 정답 열기, 뉴스 카드는 원문 열기
+          if (card.kind === 'quiz') {
+            e.preventDefault()
+            h.toggleReveal(card.id)
+          } else if (card.link) {
+            window.open(card.link, '_blank', 'noopener,noreferrer')
+          }
           break
         }
         case '?':
@@ -316,6 +398,7 @@ export default function App() {
         onSeek={setCardIndex}
         onScrubChange={setScrubbing}
         onFirst={() => setCardIndex(0)}
+        kidsMode={kidsMode}
       />
 
       <CategoryRail
@@ -334,13 +417,22 @@ export default function App() {
         scrubbing={scrubbing}
         bookmarkSet={bookmarkSet}
         seen={seen}
+        revealed={revealed}
         onIndexChange={setCardIndex}
         onCategoryChange={changeCategory}
         onToggleBookmark={toggleBookmark}
         onSeen={markSeen}
+        onTap={handleTap}
       />
 
-      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+      {showHelp && (
+        <HelpOverlay
+          onClose={() => setShowHelp(false)}
+          kidsMode={kidsMode}
+          hasKidsTab={hasKidsTab}
+          onToggleKidsMode={toggleKidsMode}
+        />
+      )}
     </div>
   )
 }

@@ -16,6 +16,7 @@ export default function TopBar({
   onSeek,
   onScrubChange,
   onFirst,
+  kidsMode = false,
 }) {
   const updated = updatedLabel(generatedAt)
   const atFirst = current <= 1
@@ -25,7 +26,13 @@ export default function TopBar({
       <div className="topbar__row">
         <div className="topbar__left">
           <span className="topbar__date">{todayLabel()}</span>
-          {updated && <span className="topbar__updated">{updated} 기준</span>}
+          {kidsMode ? (
+            <span className="topbar__kids" title="키즈 모드 — 뉴스 탭이 숨겨져 있습니다">
+              🎒 키즈
+            </span>
+          ) : (
+            updated && <span className="topbar__updated">{updated} 기준</span>
+          )}
           {!online && (
             <span className="topbar__offline" title="네트워크에 연결되어 있지 않습니다">
               오프라인

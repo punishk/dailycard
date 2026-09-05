@@ -40,10 +40,12 @@ export default function CardDeck({
   scrubbing = false,
   bookmarkSet,
   seen,
+  revealed,
   onIndexChange,
   onCategoryChange,
   onToggleBookmark,
   onSeen,
+  onTap,
 }) {
   const deckRef = useRef(null)
   const [height, setHeight] = useState(0)
@@ -171,9 +173,12 @@ export default function CardDeck({
       } else if (p.axis === 'x') {
         const speed = Math.abs(dx) / dt
         if (Math.abs(dx) > H_COMMIT_PX || speed > H_FLICK) switchCategory(dx < 0 ? 1 : -1)
+      } else if (dt < 500 && Math.abs(dx) < AXIS_LOCK_PX && Math.abs(dy) < AXIS_LOCK_PX) {
+        // 축이 정해지지 않을 만큼 짧게 눌렀다 뗐다 = 탭. 퀴즈 카드의 정답을 여는 데 쓴다.
+        onTap?.()
       }
     },
-    [go, cardH, switchCategory]
+    [go, cardH, switchCategory, onTap]
   )
 
   /* ── 마우스 휠 / 트랙패드 ────────────────────────────────── */
@@ -262,7 +267,9 @@ export default function CardDeck({
                   accent={accent}
                   bookmarked={bookmarkSet.has(card.id)}
                   seenAlready={seen.has(card.id)}
+                  revealed={revealed.has(card.id)}
                   onToggleBookmark={onToggleBookmark}
+                  onReveal={onTap}
                 />
               </div>
             )

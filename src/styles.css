@@ -139,6 +139,17 @@ code {
   flex: 0 0 auto;
 }
 
+.topbar__kids {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  color: #f0a132;
+  background: color-mix(in srgb, #f0a132 16%, transparent);
+}
+
 .topbar__offline {
   font-size: 10.5px;
   font-weight: 700;
@@ -492,8 +503,82 @@ html[data-theme='light'] .rail__chip.is-active {
 }
 
 .card--knowledge,
-.card--warm {
+.card--warm,
+.card--quiz {
   --card-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+/* ── 퀴즈 카드 ───────────────────────────────────────────── */
+
+.card--quiz .card__title {
+  font-size: clamp(20px, 4.4vw, 26px);
+  line-height: 1.42;
+}
+
+.quiz__prompt {
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-faint);
+  word-break: keep-all;
+}
+
+.quiz__promptEmoji {
+  font-size: 19px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.quiz__answerBox {
+  margin-top: 4px;
+  padding: 13px 15px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-left: 3px solid var(--accent);
+  animation: revealIn 0.28s cubic-bezier(0.16, 0.86, 0.24, 1.04);
+}
+
+@keyframes revealIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.quiz__answerLabel {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 5px;
+}
+
+.quiz__answer {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  word-break: keep-all;
+}
+
+.quiz__explain {
+  margin: 9px 0 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  word-break: keep-all;
+}
+
+.card__reveal {
+  appearance: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .card__media {
@@ -867,6 +952,77 @@ html[data-theme='light'] .rail__chip.is-active {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-dim);
+}
+
+/* 키즈 모드 스위치 */
+.overlay__kids {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 13px 14px;
+  border-radius: 13px;
+  background: color-mix(in srgb, #f0a132 12%, var(--bg-soft));
+  border: 1px solid color-mix(in srgb, #f0a132 34%, var(--border));
+}
+
+.overlay__kidsText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.overlay__kidsText strong {
+  display: block;
+  font-size: 13.5px;
+  margin-bottom: 4px;
+}
+
+.overlay__kidsText p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.overlay__kidsText code {
+  color: #f0a132;
+  font-size: 12px;
+}
+
+.overlay__switch {
+  flex: 0 0 auto;
+  appearance: none;
+  width: 46px;
+  height: 27px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.overlay__switch.is-on {
+  background: #f0a132;
+  border-color: #f0a132;
+}
+
+.overlay__switchDot {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateY(-50%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: left 0.18s cubic-bezier(0.16, 0.86, 0.24, 1.04);
+}
+
+.overlay__switch.is-on .overlay__switchDot {
+  left: 22px;
 }
 
 .overlay__note {

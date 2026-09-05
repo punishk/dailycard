@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test scripts/parser.test.mjs",
+    "test": "node --test scripts/parser.test.mjs scripts/kids.test.mjs",
     "fetch": "node scripts/fetch-news.mjs",
     "fetch:check": "node scripts/fetch-news.mjs --check",
     "probe": "node scripts/probe-wiki.mjs",
