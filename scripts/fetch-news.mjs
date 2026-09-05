@@ -13,7 +13,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 
-import { CATEGORIES, KNOWLEDGE, OPTIONS } from './feeds.config.mjs'
+import { CATEGORIES, KNOWLEDGE, OPTIONS, WARM_FILTER } from './feeds.config.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -616,14 +616,28 @@ function isExcluded(title) {
   return OPTIONS.excludeKeywords.some((k) => title.includes(k))
 }
 
+/**
+ * '따뜻한' 탭에 실을 기사인가.
+ *
+ * 배제 단어는 제목만 봅니다. 요약에는 "지난달 사고로…" 같은 배경 설명이
+ * 딸려 오기 마련이라, 요약까지 보면 멀쩡한 미담이 다 떨어져 나갑니다.
+ * 반대로 포함 단어는 요약에서도 찾습니다 — 제목은 짧아 단서가 적으니까요.
+ */
+export function isWarmStory(title = '', summary = '', filter = WARM_FILTER) {
+  if (!title) return false
+  if (filter.exclude.some((w) => title.includes(w))) return false
+  return filter.include.some((w) => title.includes(w) || summary.includes(w))
+}
+
 /** 한 카테고리의 피드들을 받아오기만 한다 (중복 걸러내기는 나중에 한꺼번에) */
 async function fetchCategory(cat, report) {
+  const perFeed = cat.maxPerFeed ?? OPTIONS.maxPerFeed
   return Promise.all(
     cat.feeds.map(async (feed) => {
       try {
         const xml = await fetchText(feed.url)
         const items = parseFeed(xml, feed)
-        const used = items.slice(0, OPTIONS.maxPerFeed)
+        const used = items.slice(0, perFeed)
         report.push({
           label: `${cat.label} · ${feed.name}`,
           ok: used.length > 0,
@@ -645,6 +659,9 @@ async function fetchCategory(cat, report) {
  */
 function mergeCategory(cat, results, dedupe, stats) {
   const cutoff = OPTIONS.maxAgeHours > 0 ? Date.now() - OPTIONS.maxAgeHours * 3600_000 : null
+  const limit = cat.warm
+    ? (cat.maxCards ?? WARM_FILTER.maxCards ?? OPTIONS.maxPerCategory)
+    : (cat.maxCards ?? OPTIONS.maxPerCategory)
   const merged = []
 
   // 피드별로 한 개씩 번갈아 뽑아, 한 언론사가 화면을 독점하지 않게 한다
@@ -656,6 +673,9 @@ function mergeCategory(cat, results, dedupe, stats) {
       if (isExcluded(item.title)) continue
       if (cutoff && item.publishedAt && Date.parse(item.publishedAt) < cutoff) continue
 
+      // '따뜻한' 탭은 훈훈한 기사만 담는다
+      if (cat.warm && !isWarmStory(item.title, item.summary || '')) continue
+
       if (dedupe.isDuplicate(item)) {
         stats.dropped++
         continue
@@ -664,14 +684,45 @@ function mergeCategory(cat, results, dedupe, stats) {
 
       merged.push({
         id: hashId(cat.id, item.link, item.title),
-        kind: 'news',
+        kind: cat.warm ? 'warm' : 'news',
         category: cat.id,
         ...item,
       })
-      if (merged.length >= OPTIONS.maxPerCategory) return merged
+      if (merged.length >= limit) return merged
     }
   }
   return merged
+}
+
+/**
+ * 받아온 기사 뭉치를 탭별 카드 목록으로 조립한다.
+ *
+ * 채우는 순서가 중요하다.
+ *   1) fillFirst  — '따뜻한' 탭. 먼저 골라 담아야 여기 실린 미담이 다른 탭에 또 나오지 않는다.
+ *   2) 보통 탭     — 세계·경제·IT·문화
+ *   3) fillLast   — '주요'. 남은 기사로 채운다. 먼저 채우면 다른 탭 기사를 다 가져가 버린다.
+ *
+ * @param rawByCat  CATEGORIES 와 같은 순서의 배열. 각 원소는 '피드별 기사 배열'의 배열.
+ * @param categories 테스트에서 갈아끼울 수 있도록 열어 둔다.
+ */
+export function assembleCategories(rawByCat, categories = CATEGORIES) {
+  const dedupe = createDedupe()
+  const stats = { dropped: 0 }
+  const mergedByCat = new Array(categories.length)
+  const rank = (cat) => (cat.fillFirst ? -1 : cat.fillLast ? 1 : 0)
+  const order = categories.map((_, i) => i).sort((a, b) => rank(categories[a]) - rank(categories[b]))
+
+  for (const i of order) {
+    const cat = categories[i]
+    let lists = rawByCat[i] ?? []
+    // '따뜻한' 탭은 다른 탭이 받아온 기사 중에서도 훈훈한 것을 데려온다
+    if (cat.harvestOthers) {
+      lists = [...lists, ...rawByCat.flatMap((ls, j) => (j === i ? [] : (ls ?? [])))]
+    }
+    mergedByCat[i] = mergeCategory(cat, lists, dedupe, stats)
+  }
+
+  return { mergedByCat, stats }
 }
 
 function printReport(report) {
@@ -708,15 +759,7 @@ async function main() {
   /* 중복은 카테고리를 넘나들며 한 번만 싣는다.
      fillLast 로 표시한 카테고리(주요)를 맨 나중에 채워야
      세계·경제·IT 가 자기 기사를 주요에 뺏기지 않는다. */
-  const dedupe = createDedupe()
-  const stats = { dropped: 0 }
-  const mergedByCat = new Array(CATEGORIES.length)
-  const order = CATEGORIES.map((_, i) => i).sort(
-    (a, b) => (CATEGORIES[a].fillLast ? 1 : 0) - (CATEGORIES[b].fillLast ? 1 : 0)
-  )
-  for (const i of order) {
-    mergedByCat[i] = mergeCategory(CATEGORIES[i], rawByCat[i], dedupe, stats)
-  }
+  const { mergedByCat, stats } = assembleCategories(rawByCat)
 
   const categories = []
   const cards = []
@@ -776,6 +819,7 @@ async function main() {
 
 // 테스트에서 불러다 쓸 수 있도록 내보낸다
 export {
+  WARM_FILTER,
   parseFeed,
   toPlainText,
   decodeEntities,

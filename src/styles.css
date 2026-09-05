@@ -491,7 +491,8 @@ html[data-theme='light'] .rail__chip.is-active {
   transform: scale(calc(1 - var(--depth) * 0.035));
 }
 
-.card--knowledge {
+.card--knowledge,
+.card--warm {
   --card-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 

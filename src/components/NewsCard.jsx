@@ -14,7 +14,8 @@ export default function NewsCard({
   const [copied, setCopied] = useState(false)
 
   const hasImage = Boolean(card.image) && !imageFailed
-  const isKnowledge = card.kind === 'knowledge'
+  // 뉴스 / 상식 / 따뜻한 이야기에 따라 카드 바탕색이 조금씩 다르다
+  const variant = card.kind === 'knowledge' || card.kind === 'warm' ? card.kind : 'news'
 
   async function share() {
     const text = `${card.title}\n${card.link}`
@@ -36,7 +37,7 @@ export default function NewsCard({
       className={[
         'card',
         active ? 'is-active' : 'is-idle',
-        isKnowledge ? 'card--knowledge' : 'card--news',
+        `card--${variant}`,
         hasImage ? 'has-image' : 'no-image',
         seenAlready && !active ? 'is-seen' : '',
       ]

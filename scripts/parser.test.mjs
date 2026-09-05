@@ -14,6 +14,9 @@ import {
   normalizeLink,
   isSameStory,
   createDedupe,
+  isWarmStory,
+  WARM_FILTER,
+  assembleCategories,
   extractEntries,
 } from './fetch-news.mjs'
 
@@ -208,4 +211,129 @@ test('제목이 비어 있으면 담지 않는다', () => {
   const d = createDedupe()
   assert.ok(d.isDuplicate({ title: '', link: 'https://a.com/1' }))
   assert.ok(d.isDuplicate({ title: '!!!', link: 'https://a.com/2' }))
+})
+
+/* ══════════════════════════════════════════════════════════
+   '따뜻한' 탭 선별
+   ══════════════════════════════════════════════════════════ */
+
+test('훈훈한 기사를 골라낸다', () => {
+  const warm = [
+    ['익명의 기부천사, 올해도 쌀 100포대 두고 갔다', ''],
+    ['물에 빠진 초등생 구한 20대 청년에 의인상', ''],
+    ['치매 노인 무사히 가족 품으로…경찰에 감사패', ''],
+    ["20년째 연탄 나눔 봉사…'이웃이 있어 삽니다'", ''],
+    ['화재로 집 잃은 이웃에 성금 3000만원 전달', ''],
+    ['고립된 등산객 4명 무사 구조', ''],
+    ['장학금 1억 쾌척한 노부부', ''],
+    ["10년간 헌혈 100회…'건강할 때 나누고 싶어'", ''],
+    ['잃어버린 지갑 찾아준 중학생', ''],
+    ['6·25 이산가족 70년 만의 상봉', ''],
+    ['백혈병 딛고 완치…다시 교단에 선 교사', ''],
+    // 제목엔 단서가 없고 요약에만 있는 경우
+    ['한 시민의 조용한 결심', '20년 동안 매달 장학금을 보내 온 사실이 뒤늦게 알려졌다.'],
+  ]
+  for (const [t, s] of warm) {
+    assert.ok(isWarmStory(t, s), `따뜻한 기사로 봐야 함: ${t}`)
+  }
+})
+
+test('훈훈한 단어를 쓰지만 어두운 기사는 걸러낸다', () => {
+  const traps = [
+    '복지재단 후원금 3억 횡령한 대표 구속',
+    '기부금 유용 의혹…시민단체 압수수색',
+    '구조 작업 중 소방관 1명 숨져',
+    '봉사활동 확인서 위조 적발',
+    '장학금 특혜 지급 논란',
+    '성금 모금 사기 일당 검거',
+    '감동 실화 영화 흥행 논란',
+    '기증 장기 배분 비리 수사',
+    '무료급식소 강제 철거에 반발',
+    '나눔재단 이사장 배임 혐의 기소',
+    '헌혈 버스 추락 사고',
+  ]
+  for (const t of traps) {
+    assert.ok(!isWarmStory(t, ''), `걸러내야 함: ${t}`)
+  }
+})
+
+test('평범한 뉴스는 따뜻한 탭에 들어오지 않는다', () => {
+  const plain = [
+    '코스피 2600 돌파',
+    '정부, 내년 예산안 확정',
+    '삼성전자 3분기 영업이익 9조원',
+    '기상청 내일 전국 비',
+    '한국은행 기준금리 동결',
+    '손흥민 2골 활약 토트넘 승리',
+    '정부에 대책 마련을 요구한 시민단체', // '구한' 이 들어 있지만 훈훈하지 않다
+    '연탄값 인상에 서민 부담 가중', // 넓은 단어를 뺀 덕분에 걸리지 않는다
+  ]
+  for (const t of plain) {
+    assert.ok(!isWarmStory(t, ''), `따뜻한 기사가 아님: ${t}`)
+  }
+})
+
+test('따뜻한 탭 키워드 목록이 서로 충돌하지 않는다', () => {
+  // 같은 단어가 포함과 배제 양쪽에 들어가면 그 단어는 영원히 걸리지 않는다
+  const both = WARM_FILTER.include.filter((w) => WARM_FILTER.exclude.includes(w))
+  assert.deepEqual(both, [], `포함·배제 목록에 함께 들어간 단어: ${both.join(', ')}`)
+  assert.ok(WARM_FILTER.include.length > 20, '포함 단어가 너무 적다')
+  assert.ok(WARM_FILTER.exclude.length > 30, '배제 단어가 너무 적다')
+})
+
+test('탭 조립: 따뜻한 탭이 먼저, 주요가 마지막으로 채워진다', () => {
+  const cats = [
+    { id: 'top', label: '주요', fillLast: true, feeds: [] },
+    { id: 'world', label: '세계', feeds: [] },
+    { id: 'warm', label: '따뜻한', warm: true, harvestOthers: true, fillFirst: true, feeds: [] },
+  ]
+  const now = new Date().toISOString()
+  const mk = (title) => ({ title, link: `https://ex.com/${encodeURIComponent(title)}`, summary: '', publishedAt: now })
+
+  const rawByCat = [
+    // 주요: 훈훈한 기사 하나 + 평범한 기사
+    [[mk('익명의 기부천사, 쌀 100포대 두고 갔다'), mk('한국은행 기준금리 동결')]],
+    // 세계: 평범한 기사 + 같은 훈훈한 기사가 또 들어옴
+    [[mk('시진핑 이집트 국빈방문'), mk('익명의 기부천사, 쌀 100포대 두고 갔다')]],
+    // 따뜻한: 자체 피드
+    [[mk('20년째 나눔 봉사한 노부부'), mk('복지재단 후원금 횡령 구속')]],
+  ]
+
+  const { mergedByCat, stats } = assembleCategories(rawByCat, cats)
+  const titles = (i) => mergedByCat[i].map((c) => c.title)
+
+  // 따뜻한 탭: 자체 미담 + 다른 탭에서 데려온 미담. 함정 기사는 빠진다.
+  assert.ok(titles(2).includes('20년째 나눔 봉사한 노부부'))
+  assert.ok(titles(2).includes('익명의 기부천사, 쌀 100포대 두고 갔다'), '다른 탭 기사도 데려와야 한다')
+  assert.ok(!titles(2).some((t) => t.includes('횡령')), '횡령 기사는 빠져야 한다')
+  assert.equal(mergedByCat[2].length, 2)
+  assert.ok(mergedByCat[2].every((c) => c.kind === 'warm'))
+
+  // 미담은 주요·세계에 다시 나오지 않는다
+  assert.ok(!titles(0).includes('익명의 기부천사, 쌀 100포대 두고 갔다'))
+  assert.ok(!titles(1).includes('익명의 기부천사, 쌀 100포대 두고 갔다'))
+
+  // 나머지는 제 자리에
+  assert.deepEqual(titles(0), ['한국은행 기준금리 동결'])
+  assert.deepEqual(titles(1), ['시진핑 이집트 국빈방문'])
+
+  // 걸러낸 중복이 집계된다 (세계에 또 실린 미담 1건)
+  assert.ok(stats.dropped >= 1, `중복 집계: ${stats.dropped}`)
+})
+
+test('탭 조립: 특정 탭 기사를 주요가 먼저 가져가지 않는다', () => {
+  const cats = [
+    { id: 'top', label: '주요', fillLast: true, feeds: [] },
+    { id: 'economy', label: '경제', feeds: [] },
+  ]
+  const now = new Date().toISOString()
+  const mk = (t) => ({ title: t, link: `https://ex.com/${encodeURIComponent(t)}`, summary: '', publishedAt: now })
+  const shared = '삼성전자 3분기 영업이익 9조원 돌파'
+
+  const { mergedByCat } = assembleCategories(
+    [[[mk(shared), mk('정부 예산안 확정')]], [[mk(shared)]]],
+    cats
+  )
+  assert.deepEqual(mergedByCat[1].map((c) => c.title), [shared], '경제가 자기 기사를 지켜야 한다')
+  assert.deepEqual(mergedByCat[0].map((c) => c.title), ['정부 예산안 확정'])
 })
